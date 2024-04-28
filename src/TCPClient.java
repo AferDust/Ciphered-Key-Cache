@@ -22,6 +22,8 @@ public class TCPClient {
 
     private  void connectToTheServer() throws IOException {
         socket = new Socket("localhost", 9090);
+//        socket.setSoTimeout(1000);
+
         reader = new DataInputStream(socket.getInputStream());
         writer = new DataOutputStream(socket.getOutputStream());
     }
@@ -31,7 +33,7 @@ public class TCPClient {
         try {
             writer.writeUTF(command);
             String response = reader.readUTF();
-            System.out.println("Server response: " + response);
+            System.out.println("Server response: \n" + response);
         } catch (IOException e) {
             e.printStackTrace();
         }

@@ -1,3 +1,4 @@
+import exceptions.EmptyListException;
 import exceptions.InvalidArrayLengthException;
 import exceptions.InvalidStringLengthException;
 
@@ -18,7 +19,7 @@ public class TCPServer {
         new Thread(() -> {
             try (ServerSocket serverSocket = new ServerSocket(9090)) {
 
-                for (; ; ) {
+                for (;;) {
                     Socket socket = serverSocket.accept();
                     System.out.println("Client " + (++clientCounter) + " accept.");
 
@@ -27,11 +28,9 @@ public class TCPServer {
                         try (DataOutputStream writer = new DataOutputStream(socket.getOutputStream());
                              DataInputStream reader = new DataInputStream(socket.getInputStream())
                         ) {
-                            for (; ; ) {
-                                System.out.println("Step in try");
+                            for (;;)
                                 handleClientRequest(writer, reader, keyValStore);
-                            }
-                        } catch (IOException b) {
+                        } catch (IOException | InterruptedException b) {
                             b.printStackTrace();
                         }
                     }).start();
@@ -42,14 +41,17 @@ public class TCPServer {
         }).start();
     }
 
-    private static void handleClientRequest(DataOutputStream writer, DataInputStream reader, HashMap<String, String> keyValStore) throws IOException {
+    private static void handleClientRequest(DataOutputStream writer, DataInputStream reader, HashMap<String, String> keyValStore) throws IOException, InterruptedException {
         String response = "";
 
         try {
             String command = reader.readUTF();
-            String[] parts = command.split("\\s+");
+            List<String> parts = Arrays.asList(command.split("\\s+"));
 
-            response = switch (parts[0].toUpperCase()) {
+            if (parts.isEmpty())
+                throw new EmptyListException("Empty message.");
+
+            response = switch (parts.get(0).toUpperCase()) {
                 case KEYS -> handleKeysRequest(keyValStore);
                 case PUT -> handlePutRequest(parts, keyValStore);
                 case DELETE -> handleDeleteRequest(parts, keyValStore);
@@ -63,42 +65,43 @@ public class TCPServer {
             System.out.println("Catch exception");
             response = exception.getMessage();
         } finally {
+//            Thread.sleep(1000);
             writer.writeUTF(response);
         }
     }
 
-    private static String handlePutRequest(String[] parts, HashMap<String, String> keyValStore) throws InvalidArrayLengthException, InvalidStringLengthException {
-        if (parts.length != 3)
+    private static String handlePutRequest(List<String> parts, HashMap<String, String> keyValStore) throws InvalidArrayLengthException, InvalidStringLengthException {
+        if (parts.size() != 3)
             throw new InvalidArrayLengthException("Invalid command format");
-        if(parts[1].length() > 10 || parts[2].length() > 10)
+        if(parts.get(1).length() > 10 || parts.get(2).length() > 10)
             throw new InvalidStringLengthException("Key or Value too long (max: 10 character)");
 
-        keyValStore.put(parts[1], parts[2]);
+        keyValStore.put(parts.get(1), parts.get(2));
         return "Successfully added key-value pair";
     }
 
     private static String handleKeysRequest(HashMap<String, String> keyValStore) {
-        return keyValStore.keySet().toString().isEmpty()
+        return keyValStore.keySet().isEmpty()
                 ? "No keys in database."
                 : "Keys: " + keyValStore.keySet();
     }
 
-    private static String handleDeleteRequest(String[] parts, HashMap<String, String> keyValStore) throws InvalidArrayLengthException {
-        if (parts.length != 2)
+    private static String handleDeleteRequest(List<String> parts, HashMap<String, String> keyValStore) throws InvalidArrayLengthException {
+        if (parts.size() != 2)
             throw new InvalidArrayLengthException("Invalid command format");
-        if (!keyValStore.containsKey(parts[1]))
-            throw new IllegalArgumentException("Key " + parts[1] + " not found in the map");
+        if (!keyValStore.containsKey(parts.get(1)))
+            throw new IllegalArgumentException("Key {" + parts.get(1) + "} not found in the map");
 
-        keyValStore.remove(parts[1]);
+        keyValStore.remove(parts.get(1));
         return "Successfully deleted key";
     }
 
-    private static String handleGetRequest(String[] parts, HashMap<String, String> keyValStore) throws InvalidArrayLengthException {
-        if (parts.length != 2)
+    private static String handleGetRequest(List<String> parts, HashMap<String, String> keyValStore) throws InvalidArrayLengthException {
+        if (parts.size() != 2)
             throw new InvalidArrayLengthException("Invalid command format");
-        if (!keyValStore.containsKey(parts[1]))
-            throw new IllegalArgumentException("Key " + parts[1] + " not found in the map");
+        if (!keyValStore.containsKey(parts.get(1)))
+            throw new IllegalArgumentException("Key {" +parts.get(1) + "} not found in the map");
 
-        return keyValStore.get(parts[1]);
+        return keyValStore.get(parts.get(1));
     }
 }
