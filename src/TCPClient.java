@@ -48,7 +48,7 @@ public class TCPClient {
 
             if (command.equalsIgnoreCase(QUIT)) {
                 this.cleanUp();
-                break;
+                System.exit(0);
             }
         }
     }
@@ -74,4 +74,8 @@ public class TCPClient {
         }
     }
 
+    public static void main(String[] args) throws IOException {
+        TCPClient client = new TCPClient();
+        client.start();
+    }
 }

@@ -4,50 +4,72 @@ import exceptions.InvalidStringLengthException;
 
 import java.io.*;
 import java.net.*;
-import java.util.*;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
 
-public class TCPServer {
+
+
+public class UDPServer {
+    private static final int SERVER_PORT = 9091;
+
     private static final String QUIT = "QUIT";
     private static final String KEYS = "KEYS";
     private static final String PUT = "PUT";
     private static final String DELETE = "DELETE";
     private static final String GET = "GET";
 
-    private static int clientCounter = 0;
+    private static HashMap<String, HashMap<String, String>> clientKeyValueDatabase  = new HashMap<>();
+    private static byte[] receiveData = new byte[1024];
+    private static byte[] sendData = new byte[1024];
 
     private static void startServer() {
-        try (ServerSocket serverSocket = new ServerSocket(9090)) {
-
+        try (DatagramSocket serverSocket = new DatagramSocket(SERVER_PORT)) {
             for (; ; ) {
-                Socket socket = serverSocket.accept();
-                System.out.println("Client " + (++clientCounter) + " accept.");
-
-                HashMap<String, String> keyValStore = new HashMap<>();
                 new Thread(() -> {
-                    try (DataOutputStream writer = new DataOutputStream(socket.getOutputStream());
-                         DataInputStream reader = new DataInputStream(socket.getInputStream())
-                    ) {
-                        for (; ; )
-                            handleClientRequest(writer, reader, keyValStore);
-                    } catch (IOException | InterruptedException b) {
-                        b.printStackTrace();
+                    DatagramPacket receivePacket;
+                    DatagramPacket sendPacket;
+                    try {
+                        for (; ; ) {
+                            receivePacket = new DatagramPacket(receiveData, receiveData.length);
+                            serverSocket.receive(receivePacket);
+
+                            String command = new String(receivePacket.getData(), 0, receivePacket.getLength());
+                            System.out.println(command);
+                            int port = receivePacket.getPort();
+
+                            String response = handleCommand(command);
+                            System.out.println(response);
+
+                            sendData = response.getBytes();
+                            sendPacket = new DatagramPacket(sendData, sendData.length, receivePacket.getAddress(), port);
+                            serverSocket.send(sendPacket);
+                        }
+                    } catch (IOException exception) {
+                        System.err.println("Error: " + exception.getMessage());
+                        exception.printStackTrace();
                     }
                 }).start();
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
-
     }
 
-    private static void handleClientRequest(DataOutputStream writer, DataInputStream reader, HashMap<String, String> keyValStore) throws IOException, InterruptedException {
+
+    private static String handleCommand(String command) {
         String response = "";
 
         try {
-            String command = reader.readUTF();
             List<String> parts = Arrays.asList(command.split("\\s+"));
+            String uuid = parts.get(parts.size() - 1);
 
-            if (parts.isEmpty())
+            if (!clientKeyValueDatabase.containsKey(uuid))
+                clientKeyValueDatabase.put(uuid, new HashMap<>());
+
+            HashMap<String, String> keyValStore = clientKeyValueDatabase.get(uuid);
+
+            if (parts.size() == 1)
                 throw new EmptyListException("Empty message.");
 
             response = switch (parts.get(0).toUpperCase()) {
@@ -63,16 +85,15 @@ public class TCPServer {
         } catch (Exception exception) {
             System.out.println("Catch exception");
             response = exception.getMessage();
-        } finally {
-//            Thread.sleep(1000);
-            writer.writeUTF(response);
         }
+
+        return response;
     }
 
     private static String handlePutRequest(List<String> parts, HashMap<String, String> keyValStore) throws InvalidArrayLengthException, InvalidStringLengthException {
-        if (parts.size() != 3)
+        if (parts.size() != 4)
             throw new InvalidArrayLengthException("Invalid command format");
-        if (parts.get(1).length() > 10 || parts.get(2).length() > 10)
+        if(parts.get(1).length() > 10 || parts.get(2).length() > 10)
             throw new InvalidStringLengthException("Key or Value too long (max: 10 character)");
 
         keyValStore.put(parts.get(1), parts.get(2));
@@ -86,7 +107,7 @@ public class TCPServer {
     }
 
     private static String handleDeleteRequest(List<String> parts, HashMap<String, String> keyValStore) throws InvalidArrayLengthException {
-        if (parts.size() != 2)
+        if (parts.size() != 3)
             throw new InvalidArrayLengthException("Invalid command format");
         if (!keyValStore.containsKey(parts.get(1)))
             throw new IllegalArgumentException("Key {" + parts.get(1) + "} not found in the map");
@@ -96,16 +117,13 @@ public class TCPServer {
     }
 
     private static String handleGetRequest(List<String> parts, HashMap<String, String> keyValStore) throws InvalidArrayLengthException {
-        if (parts.size() != 2)
+        if (parts.size() != 3)
             throw new InvalidArrayLengthException("Invalid command format");
         if (!keyValStore.containsKey(parts.get(1)))
-            throw new IllegalArgumentException("Key {" + parts.get(1) + "} not found in the map");
+            throw new IllegalArgumentException("Key {" +parts.get(1) + "} not found in the map");
 
         return keyValStore.get(parts.get(1));
     }
 
-
-    public static void main(String[] args) {
-        startServer();
-    }
+    public static void main(String[] args) { startServer(); }
 }
